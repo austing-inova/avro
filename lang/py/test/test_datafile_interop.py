@@ -20,13 +20,13 @@ from avro import datafile
 
 class TestDataFileInterop(unittest.TestCase):
   def test_interop(self):
-    print ''
-    print 'TEST INTEROP'
-    print '============'
-    print ''
+    print( '')
+    print( 'TEST INTEROP')
+    print( '============')
+    print( '')
     for f in os.listdir('@INTEROP_DATA_DIR@'):
-      print 'READING %s' % f
-      print ''
+      print(( 'READING %s' % f))
+      print( '')
 
       # read data in binary from file
       reader = open(os.path.join('@INTEROP_DATA_DIR@', f), 'rb')

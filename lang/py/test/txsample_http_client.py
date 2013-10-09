@@ -93,7 +93,7 @@ if __name__ == '__main__':
   results = defer.gatherResults(requests)
 
   def replay_cb(result):
-    print("Replay Result: " + result)
+    print(("Replay Result: " + result))
     reactor.stop()
 
   def replay(_):

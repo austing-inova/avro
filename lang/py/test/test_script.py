@@ -15,7 +15,7 @@
 # limitations under the License.
 import unittest
 import csv
-from cStringIO import StringIO
+from io import StringIO
 try:
     import json
 except ImportError:
@@ -204,7 +204,7 @@ class TestWrite(unittest.TestCase):
 
     def load_avro(self, filename):
         out = check_output([SCRIPT, "cat", filename])
-        return map(json.loads, out.splitlines())
+        return list(map(json.loads, out.splitlines()))
 
     def test_version(self):
         check_call([SCRIPT, "write", "--version"])

@@ -25,6 +25,7 @@ try:
 except ImportError:
   import simplejson as json
 from avro import schema
+import collections
 
 #
 # Constants
@@ -58,11 +59,11 @@ class Protocol(object):
 
   def _parse_messages(self, messages, names):
     message_objects = {}
-    for name, body in messages.iteritems():
-      if message_objects.has_key(name):
+    for name, body in messages.items():
+      if name in message_objects:
         fail_msg = 'Message name "%s" repeated.' % name
         raise ProtocolParseException(fail_msg)
-      elif not(hasattr(body, 'get') and callable(body.get)):
+      elif not(hasattr(body, 'get') and isinstance(body.get, collections.Callable)):
         fail_msg = 'Message name "%s" has non-object body %s.' % (name, body)
         raise ProtocolParseException(fail_msg)
       request = body.get('request')
@@ -76,17 +77,17 @@ class Protocol(object):
     if not name:
       fail_msg = 'Protocols must have a non-empty name.'
       raise ProtocolParseException(fail_msg)
-    elif not isinstance(name, basestring):
+    elif not isinstance(name, str):
       fail_msg = 'The name property must be a string.'
       raise ProtocolParseException(fail_msg)
-    elif namespace is not None and not isinstance(namespace, basestring):
+    elif namespace is not None and not isinstance(namespace, str):
       fail_msg = 'The namespace property must be a string.'
       raise ProtocolParseException(fail_msg)
     elif types is not None and not isinstance(types, list):
       fail_msg = 'The types property must be a list.'
       raise ProtocolParseException(fail_msg)
     elif (messages is not None and 
-          not(hasattr(messages, 'get') and callable(messages.get))):
+          not(hasattr(messages, 'get') and isinstance(messages.get, collections.Callable))):
       fail_msg = 'The messages property must be a JSON object.'
       raise ProtocolParseException(fail_msg)
 
@@ -130,7 +131,7 @@ class Protocol(object):
       to_dump['types'] = [ t.to_json(names) for t in self.types ]
     if self.messages:
       messages_dict = {}
-      for name, body in self.messages.iteritems():
+      for name, body in self.messages.items():
         messages_dict[name] = body.to_json(names)
       to_dump['messages'] = messages_dict
     return to_dump
@@ -151,7 +152,7 @@ class Message(object):
     return schema.RecordSchema(None, None, request, names, 'request')
   
   def _parse_response(self, response, names):
-    if isinstance(response, basestring) and names.has_name(response, None):
+    if isinstance(response, str) and names.has_name(response, None):
       return names.get_name(response, None)
     else:
       return schema.make_avsc_object(response, names)
@@ -203,7 +204,7 @@ class Message(object):
       
 def make_avpr_object(json_data):
   """Build Avro Protocol from data parsed out of JSON string."""
-  if hasattr(json_data, 'get') and callable(json_data.get):
+  if hasattr(json_data, 'get') and isinstance(json_data.get, collections.Callable):
     name = json_data.get('protocol')
     namespace = json_data.get('namespace')
     types = json_data.get('types')

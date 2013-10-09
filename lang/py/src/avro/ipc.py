@@ -16,11 +16,11 @@
 """
 Support for inter-process calls.
 """
-import httplib
+import http.client
 try:
-  from cStringIO import StringIO
+  from io import StringIO
 except ImportError:
-  from StringIO import StringIO
+  from io import StringIO
 from avro import io
 from avro import protocol
 from avro import schema
@@ -31,11 +31,37 @@ from avro import schema
 
 # Handshake schema is pulled in during build
 HANDSHAKE_REQUEST_SCHEMA = schema.parse("""
-@HANDSHAKE_REQUEST_SCHEMA@
+{
+    "type": "record",
+    "name": "HandshakeRequest", "namespace":"org.apache.avro.ipc",
+    "fields": [
+        {"name": "clientHash",
+	 "type": {"type": "fixed", "name": "MD5", "size": 16}},
+        {"name": "clientProtocol", "type": ["null", "string"]},
+        {"name": "serverHash", "type": "MD5"},
+ 	{"name": "meta", "type": ["null", {"type": "map", "values": "bytes"}]}
+ ]
+}
+
 """)
 
 HANDSHAKE_RESPONSE_SCHEMA = schema.parse("""
-@HANDSHAKE_RESPONSE_SCHEMA@
+{
+    "type": "record",
+    "name": "HandshakeResponse", "namespace": "org.apache.avro.ipc",
+    "fields": [
+        {"name": "match",
+         "type": {"type": "enum", "name": "HandshakeMatch",
+                  "symbols": ["BOTH", "CLIENT", "NONE"]}},
+        {"name": "serverProtocol",
+         "type": ["null", "string"]},
+        {"name": "serverHash",
+         "type": ["null", {"type": "fixed", "name": "MD5", "size": 16}]},
+ 	{"name": "meta",
+         "type": ["null", {"type": "map", "values": "bytes"}]}
+    ]
+}
+
 """)
 
 HANDSHAKE_REQUESTOR_WRITER = io.DatumWriter(HANDSHAKE_REQUEST_SCHEMA)
@@ -296,9 +322,9 @@ class Responder(object):
       # perform server logic
       try:
         response = self.invoke(local_message, request)
-      except AvroRemoteException, e:
+      except AvroRemoteException as e:
         error = e
-      except Exception, e:
+      except Exception as e:
         error = AvroRemoteException(str(e))
 
       # write response using local protocol
@@ -310,7 +336,7 @@ class Responder(object):
       else:
         writers_schema = local_message.errors
         self.write_error(writers_schema, error, buffer_encoder)
-    except schema.AvroException, e:
+    except schema.AvroException as e:
       error = AvroRemoteException(str(e))
       buffer_encoder = io.BinaryEncoder(StringIO())
       META_WRITER.write(response_metadata, buffer_encoder)
@@ -441,7 +467,7 @@ class HTTPTransceiver(object):
   """
   def __init__(self, host, port, req_resource='/'):
     self.req_resource = req_resource
-    self.conn = httplib.HTTPConnection(host, port)
+    self.conn = http.client.HTTPConnection(host, port)
     self.conn.connect()
 
   # read-only properties

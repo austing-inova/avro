@@ -17,10 +17,7 @@
 Read/Write Avro File Object Containers.
 """
 import zlib
-try:
-  from cStringIO import StringIO
-except ImportError:
-  from StringIO import StringIO
+from io import BytesIO
 from avro import schema
 from avro import io
 try:
@@ -82,7 +79,7 @@ class DataFileWriter(object):
     self._writer = writer
     self._encoder = io.BinaryEncoder(writer)
     self._datum_writer = datum_writer
-    self._buffer_writer = StringIO()
+    self._buffer_writer = BytesIO()
     self._buffer_encoder = io.BinaryEncoder(self._buffer_writer)
     self._block_count = 0
     self._meta = {}
@@ -299,13 +296,16 @@ class DataFileReader(object):
       META_SCHEMA, META_SCHEMA, self.raw_decoder)
 
     # check magic number
-    if header.get('magic') != MAGIC:
+    if header.get('magic').decode('utf-8') != MAGIC:
       fail_msg = "Not an Avro data file: %s doesn't match %s."\
                  % (header.get('magic'), MAGIC)
       raise schema.AvroException(fail_msg)
 
     # set metadata
     self._meta = header['meta']
+    # Decode the metadata from bytes objects to strings
+    for key,value in self._meta.items():
+      self._meta[key] = value.decode('utf-8')
 
     # set sync marker
     self._sync_marker = header['sync']
@@ -323,13 +323,13 @@ class DataFileReader(object):
       # -15 is the log of the window size; negative indicates
       # "raw" (no zlib headers) decompression.  See zlib.h.
       uncompressed = zlib.decompress(data, -15)
-      self._datum_decoder = io.BinaryDecoder(StringIO(uncompressed))
+      self._datum_decoder = io.BinaryDecoder(BytesIO(uncompressed))
     elif self.codec == 'snappy':
       # Compressed data includes a 4-byte CRC32 checksum
       length = self.raw_decoder.read_long()
       data = self.raw_decoder.read(length - 4)
       uncompressed = snappy.decompress(data)
-      self._datum_decoder = io.BinaryDecoder(StringIO(uncompressed))
+      self._datum_decoder = io.BinaryDecoder(BytesIO(uncompressed))
       self.raw_decoder.check_crc32(uncompressed);
     else:
       raise DataFileException("Unknown codec: %r" % self.codec)
@@ -348,7 +348,7 @@ class DataFileReader(object):
 
   # TODO(hammer): handle block of length zero
   # TODO(hammer): clean this up with recursion
-  def next(self):
+  def __next__(self):
     """Return the next datum in the file."""
     if self.block_count == 0:
       if self.is_EOF():

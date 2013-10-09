@@ -48,7 +48,7 @@ def write(n):
     schema = avro.schema.parse(schema_s)
     writer = avro.io.DatumWriter(schema)
     dw = avro.datafile.DataFileWriter(out, writer, schema) #,codec='deflate')
-    for _ in xrange(n):
+    for _ in range(n):
         response = rand_ip()
         query = rand_name()
         type = choice(types)
@@ -73,5 +73,5 @@ def t(f, *args):
 
 if __name__ == "__main__":
     n = int(sys.argv[1])
-    print "Write %0.4f" % t(write, n)
-    print "Read %0.4f" % t(read)
+    print("Write %0.4f" % t(write, n))
+    print("Read %0.4f" % t(read))

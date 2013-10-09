@@ -106,20 +106,20 @@ def validate(expected_schema, datum):
   elif schema_type == 'boolean':
     return isinstance(datum, bool)
   elif schema_type == 'string':
-    return isinstance(datum, basestring)
-  elif schema_type == 'bytes':
     return isinstance(datum, str)
+  elif schema_type == 'bytes':
+    return isinstance(datum, bytes)
   elif schema_type == 'int':
-    return ((isinstance(datum, int) or isinstance(datum, long)) 
+    return ((isinstance(datum, int) or isinstance(datum, int)) 
             and INT_MIN_VALUE <= datum <= INT_MAX_VALUE)
   elif schema_type == 'long':
-    return ((isinstance(datum, int) or isinstance(datum, long)) 
+    return ((isinstance(datum, int) or isinstance(datum, int)) 
             and LONG_MIN_VALUE <= datum <= LONG_MAX_VALUE)
   elif schema_type in ['float', 'double']:
-    return (isinstance(datum, int) or isinstance(datum, long)
+    return (isinstance(datum, int) or isinstance(datum, int)
             or isinstance(datum, float))
   elif schema_type == 'fixed':
-    return isinstance(datum, str) and len(datum) == expected_schema.size
+    return isinstance(datum, bytes) and len(datum) == expected_schema.size
   elif schema_type == 'enum':
     return datum in expected_schema.symbols
   elif schema_type == 'array':
@@ -127,9 +127,9 @@ def validate(expected_schema, datum):
       False not in [validate(expected_schema.items, d) for d in datum])
   elif schema_type == 'map':
     return (isinstance(datum, dict) and
-      False not in [isinstance(k, basestring) for k in datum.keys()] and
+      False not in [isinstance(k, str) for k in list(datum.keys())] and
       False not in
-        [validate(expected_schema.values, v) for v in datum.values()])
+        [validate(expected_schema.values, v) for v in list(datum.values())])
   elif schema_type in ['union', 'error_union']:
     return True in [validate(s, datum) for s in expected_schema.schemas]
   elif schema_type in ['record', 'error', 'request']:
@@ -170,6 +170,7 @@ class BinaryDecoder(object):
     whose value is either 0 (false) or 1 (true).
     """
     return ord(self.read(1)) == 1
+    #return struct.unpack('?', self.read(1))[0]
 
   def read_int(self):
     """
@@ -197,10 +198,7 @@ class BinaryDecoder(object):
     The float is converted into a 32-bit integer using a method equivalent to
     Java's floatToIntBits and then encoded in little-endian format.
     """
-    bits = (((ord(self.read(1)) & 0xffL)) |
-      ((ord(self.read(1)) & 0xffL) <<  8) |
-      ((ord(self.read(1)) & 0xffL) << 16) |
-      ((ord(self.read(1)) & 0xffL) << 24))
+    bits = struct.unpack('<I', self.read(4))[0]
     return STRUCT_FLOAT.unpack(STRUCT_INT.pack(bits))[0]
 
   def read_double(self):
@@ -209,28 +207,22 @@ class BinaryDecoder(object):
     The double is converted into a 64-bit integer using a method equivalent to
     Java's doubleToLongBits and then encoded in little-endian format.
     """
-    bits = (((ord(self.read(1)) & 0xffL)) |
-      ((ord(self.read(1)) & 0xffL) <<  8) |
-      ((ord(self.read(1)) & 0xffL) << 16) |
-      ((ord(self.read(1)) & 0xffL) << 24) |
-      ((ord(self.read(1)) & 0xffL) << 32) |
-      ((ord(self.read(1)) & 0xffL) << 40) |
-      ((ord(self.read(1)) & 0xffL) << 48) |
-      ((ord(self.read(1)) & 0xffL) << 56))
+    bits = struct.unpack('<Q', self.read(8))[0]
     return STRUCT_DOUBLE.unpack(STRUCT_LONG.pack(bits))[0]
 
   def read_bytes(self):
     """
     Bytes are encoded as a long followed by that many bytes of data. 
     """
-    return self.read(self.read_long())
+    size = self.read_long()
+    return self.read(size)
 
   def read_utf8(self):
     """
     A string is encoded as a long followed by
     that many bytes of UTF-8 encoded character data.
     """
-    return unicode(self.read_bytes(), "utf-8")
+    return self.read_bytes().decode("utf-8")
 
   def check_crc32(self, bytes):
     checksum = STRUCT_CRC32.unpack(self.read(4))[0];
@@ -292,10 +284,7 @@ class BinaryEncoder(object):
     a boolean is written as a single byte 
     whose value is either 0 (false) or 1 (true).
     """
-    if datum:
-      self.write(chr(1))
-    else:
-      self.write(chr(0))
+    self.write(struct.pack('?', datum))
 
   def write_int(self, datum):
     """
@@ -309,9 +298,9 @@ class BinaryEncoder(object):
     """
     datum = (datum << 1) ^ (datum >> 63)
     while (datum & ~0x7F) != 0:
-      self.write(chr((datum & 0x7f) | 0x80))
+      self.write(struct.pack('B',(datum & 0x7f) | 0x80))
       datum >>= 7
-    self.write(chr(datum))
+    self.write(struct.pack('B', datum))
 
   def write_float(self, datum):
     """
@@ -320,10 +309,7 @@ class BinaryEncoder(object):
     Java's floatToIntBits and then encoded in little-endian format.
     """
     bits = STRUCT_INT.unpack(STRUCT_FLOAT.pack(datum))[0]
-    self.write(chr((bits) & 0xFF))
-    self.write(chr((bits >> 8) & 0xFF))
-    self.write(chr((bits >> 16) & 0xFF))
-    self.write(chr((bits >> 24) & 0xFF))
+    self.write(struct.pack('<I', bits))
 
   def write_double(self, datum):
     """
@@ -332,19 +318,16 @@ class BinaryEncoder(object):
     Java's doubleToLongBits and then encoded in little-endian format.
     """
     bits = STRUCT_LONG.unpack(STRUCT_DOUBLE.pack(datum))[0]
-    self.write(chr((bits) & 0xFF))
-    self.write(chr((bits >> 8) & 0xFF))
-    self.write(chr((bits >> 16) & 0xFF))
-    self.write(chr((bits >> 24) & 0xFF))
-    self.write(chr((bits >> 32) & 0xFF))
-    self.write(chr((bits >> 40) & 0xFF))
-    self.write(chr((bits >> 48) & 0xFF))
-    self.write(chr((bits >> 56) & 0xFF))
+    self.write(struct.pack('<Q', bits))
 
   def write_bytes(self, datum):
     """
     Bytes are encoded as a long followed by that many bytes of data. 
     """
+    
+    # What is calling this with a string?!
+    if isinstance(datum, str):
+        datum = bytes(datum,'utf-8')
     self.write_long(len(datum))
     self.write(struct.pack('%ds' % len(datum), datum))
 
@@ -356,11 +339,11 @@ class BinaryEncoder(object):
     datum = datum.encode("utf-8")
     self.write_bytes(datum)
 
-  def write_crc32(self, bytes):
+  def write_crc32(self, bytez):
     """
     A 4-byte, big-endian CRC32 checksum
     """
-    self.write(STRUCT_CRC32.pack(crc32(bytes) & 0xffffffff));
+    self.write(STRUCT_CRC32.pack(crc32(bytez) & 0xffffffff));
 
 #
 # DatumReader/Writer
@@ -695,8 +678,8 @@ class DatumReader(object):
     # fill in default values
     if len(readers_fields_dict) > len(read_record):
       writers_fields_dict = writers_schema.fields_dict
-      for field_name, field in readers_fields_dict.items():
-        if not writers_fields_dict.has_key(field_name):
+      for field_name, field in list(readers_fields_dict.items()):
+        if field_name not in writers_fields_dict:
           if field.has_default:
             field_val = self._read_default_value(field.type, field.default)
             read_record[field.name] = field_val
@@ -721,7 +704,7 @@ class DatumReader(object):
     elif field_schema.type == 'int':
       return int(default_value)
     elif field_schema.type == 'long':
-      return long(default_value)
+      return int(default_value)
     elif field_schema.type in ['float', 'double']:
       return float(default_value)
     elif field_schema.type in ['enum', 'fixed', 'string', 'bytes']:
@@ -734,7 +717,7 @@ class DatumReader(object):
       return read_array
     elif field_schema.type == 'map':
       read_map = {}
-      for key, json_val in default_value.items():
+      for key, json_val in list(default_value.items()):
         map_val = self._read_default_value(field_schema.values, json_val)
         read_map[key] = map_val
       return read_map
@@ -809,6 +792,10 @@ class DatumWriter(object):
     Fixed instances are encoded using the number of bytes declared
     in the schema.
     """
+    
+    # Why is this necessary - what is calling this with a string?
+    if isinstance(datum, str):
+        datum = datum.encode('utf-8')
     encoder.write(datum)
 
   def write_enum(self, writers_schema, datum, encoder):
@@ -857,7 +844,7 @@ class DatumWriter(object):
     """
     if len(datum) > 0:
       encoder.write_long(len(datum))
-      for key, val in datum.items():
+      for key, val in list(datum.items()):
         encoder.write_utf8(key)
         self.write_data(writers_schema.values, val, encoder)
     encoder.write_long(0)
